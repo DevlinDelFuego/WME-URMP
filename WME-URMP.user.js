@@ -7727,11 +7727,13 @@ function WMEURMPT_Injected () {
           WMEURMPT.logDebug('this.id: ' + this.id + '; this.data.venueUpdateRequests[' + n + '].dateAdded: ' + this.data.venueUpdateRequests[n].dateAdded, this)
         }
       } else if (Object.prototype.hasOwnProperty.call(thePUR, 'venueUpdateRequests') && thePUR.venueUpdateRequests.length === 0) {
-        WMEURMPT.PURList.splice(WMEURMPT.PURMap[this.id], 1)
-        WMEURMPT.PURMap = WMEURMPT.listToObject(WMEURMPT.PURList)
-        this.clean()
-        WMEURMPT.updateIHMFromPURList()
-        return
+          if (typeof WMEURMPT.PURMap[this.id] !== 'undefined') {
+            WMEURMPT.PURList.splice(WMEURMPT.PURMap[this.id], 1)
+            WMEURMPT.PURMap = WMEURMPT.listToObject(WMEURMPT.PURList)
+            this.clean()
+            WMEURMPT.updateIHMFromPURList()
+          }
+          return
       }
       this.clean()
       this.updateDistanceToMapCenter()
