@@ -7628,7 +7628,7 @@ function WMEURMPT_Injected () {
 
   WMEURMPT.getMC = function (lon, lat, id) {
     const turfLine = turf.lineString([[lon - 0.01, lat - 0.01], [lon + 0.01, lat + 0.01]])
-    const bounds = truf.bbox(turfLine)
+    const bounds = turf.bbox(turfLine)
     const MCs = WMEURMPT.getMPs(bounds)
     if (MCs == null) {
       return null
@@ -7808,8 +7808,8 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.getPUR = function (lon, lat, id) {
-    const turfLine = truf.lineString([[lon - 0.01, lat - 0.01], [lon + 0.01, lat + 0.01]])
-    const bounds = truf.bbox(turfLine)
+    const turfLine = turf.lineString([[lon - 0.01, lat - 0.01], [lon + 0.01, lat + 0.01]])
+    const bounds = turf.bbox(turfLine)
     const PURs = WMEURMPT.getMPs(bounds)
     if (PURs == null) {
       return null
