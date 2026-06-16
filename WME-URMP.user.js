@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        WME UR-MP tracking
-// @version     3.9.30
+// @version     3.9.31
 // @description Track UR and MP in the Waze Map Editor
 // @namespace   https://greasyfork.org/en/scripts/368141-wme-ur-mp-tracking
 // @include     /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -196,7 +196,7 @@ function WMEURMPT_Injected () {
   const NL = "\n"
   const WMEURMPT = {}
   WMEURMPT.isDebug = false
-  WMEURMPT.urmpt_version = '3.9.30'
+  WMEURMPT.urmpt_version = '3.9.31'
   WMEURMPT.URList = []
   WMEURMPT.URBlacklist = []
   WMEURMPT.URMap = {}
@@ -6441,6 +6441,7 @@ function WMEURMPT_Injected () {
     if (filter != null) {
       let filterArea = []
       if (filter != null && (filter.type === 'editableArea' || filter.type === 'driveArea' || filter.type === 'managedArea')) {
+        WMEURMPT.logDebug('User Areas: ', MPs.userAreas.objects);
         for (let a = 0; a < MPs.userAreas.objects.length; a++) {
           if (MPs.userAreas.objects[a].geometry.type === 'MultiPolygon') {
             filterArea = filterArea.concat(turf.multiPolygon(MPs.userAreas.objects[a].geometry.coordinates))
@@ -6452,6 +6453,9 @@ function WMEURMPT_Injected () {
       if (filter != null && (filter.type === 'country' || filter.type === 'custom')) {
         filterArea = filterArea.concat(WMEURMPT.fetchAreaGeometry(filter.name, filter.type))
       }
+
+      WMEURMPT.logDebug('Filter Areas Count:', filterArea.length);
+
       let cmp = 0
       if (Object.prototype.hasOwnProperty.call(MPs, 'problems')) {
         while (cmp < MPs.problems.objects.length) {
