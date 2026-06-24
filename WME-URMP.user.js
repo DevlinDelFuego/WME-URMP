@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        WME UR-MP tracking
-// @version     3.9.31
+// @version     3.9.32
 // @description Track UR and MP in the Waze Map Editor
 // @namespace   https://greasyfork.org/en/scripts/368141-wme-ur-mp-tracking
 // @include     /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -282,6 +282,7 @@ function WMEURMPT_Injected () {
   WMEURMPT.PURCategoriesMaxLength = 9
   WMEURMPT.PURNameMaxLength = 12
   WMEURMPT.keepBlacklist = true
+  WMEURMPT.hideRank4Tip = false
   WMEURMPT.visitedURBeforeActionsSaved = []
   WMEURMPT.visitedMPBeforeActionsSaved = []
   WMEURMPT.visitedTPBeforeActionsSaved = []
@@ -572,34 +573,26 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.initializeWazeObjects = function () {
-    const objectToCheck = [
-      { o: 'W.map', s: 'wazeMap' },
-      { o: 'W.model', s: 'wazeModel' },
-      { o: 'W.loginManager', s: 'loginManager' },
-      { o: 'W.controller', s: 'wazeController' },
-      { o: 'W.Config.api_base', s: 'wazeConfigApiBase' },
-      { o: 'W.Config.paths.features', s: 'wazeConfigApiFeatures' },
-      { o: 'W.Config.paths.updateRequestSessions', s: 'wazeConfigApiUpdateRequestSessions' },
-      { o: 'W.loginManager.user', s: 'me' },
-      { o: 'W.loginManager.user.attributes.rank', s: 'ul' },
-      { o: 'W.loginManager.user.attributes.isAreaManager', s: 'uam' },
-      { o: 'W.problemsController', s: 'wazePC' },
-      { o: 'W.userscripts', s: 'wazeUS' }
-    ]
-    for (let i = 0; i < objectToCheck.length; i++) {
-      const path = objectToCheck[i].o.split('.')
-      let object = unsafeWindow
-      for (let j = 0; j < path.length; j++) {
-        object = object[path[j]]
-        if (typeof object === 'undefined' || object == null) {
-          window.setTimeout(WMEURMPT.initializeWazeObjects, 1000)
-          return
-        } else {
-          WMEURMPT[objectToCheck[i].s] = object
-        }
-      }
+    const W = unsafeWindow.W
+    if (!W || !W.map || !W.model || !W.loginManager) {
+      window.setTimeout(WMEURMPT.initializeWazeObjects, 500)
+      return
     }
-    WMEURMPT.ul = (WMEURMPT.ul + 1) * 2
+    // User rank and area-manager flag come from the SDK
+    const userInfo = wmeSDK.State.getUserInfo()
+    WMEURMPT.ul = userInfo ? (userInfo.rank + 1) * 2 : 2
+    WMEURMPT.uam = userInfo ? userInfo.isAreaManager : false
+    // W.* references kept for functionality not yet available in the SDK
+    WMEURMPT.wazeMap = W.map
+    WMEURMPT.wazeModel = W.model
+    WMEURMPT.loginManager = W.loginManager
+    WMEURMPT.me = W.loginManager.user
+    WMEURMPT.wazeController = W.controller
+    WMEURMPT.wazePC = W.problemsController
+    WMEURMPT.wazeUS = W.userscripts
+    WMEURMPT.wazeConfigApiBase = W.Config.api_base
+    WMEURMPT.wazeConfigApiFeatures = W.Config.paths.features
+    WMEURMPT.wazeConfigApiUpdateRequestSessions = W.Config.paths.updateRequestSessions
     WMEURMPT.initializeElements()
   }
 
@@ -824,11 +817,11 @@ function WMEURMPT_Injected () {
         filterArea = filterArea.concat( thisArea.geometryGeoJSON )
       }
       else if (typeof thisArea.geometryWKT !== 'undefined' && thisArea.geometryWKT !== null) {
-        filterArea = filterArea.concat( W.userscripts.convertWktToGeoJSON(thisArea.geometryWKT))
+        filterArea = filterArea.concat( WMEURMPT.wazeUS.convertWktToGeoJSON(thisArea.geometryWKT))
       }
       else if (typeof thisArea.geometryOL !== 'undefined' && thisArea.geometryOL !== null) {
-        filterArea = filterArea.concat(W.userscripts.toGeoJSONGeometry(thisArea.geometryOL))
-        WMEURMPT.areaList.country[i].geometryGeoJSON = W.userscripts.toGeoJSONGeometry(thisArea.geometryOL)
+        filterArea = filterArea.concat(WMEURMPT.wazeUS.toGeoJSONGeometry(thisArea.geometryOL))
+        WMEURMPT.areaList.country[i].geometryGeoJSON = WMEURMPT.wazeUS.toGeoJSONGeometry(thisArea.geometryOL)
       }
     }
 
@@ -999,8 +992,8 @@ function WMEURMPT_Injected () {
             for (let c = 0; c < ur.data.session.comments.length; c++) {
               const userID = ur.data.session.comments[c].userID
               let userName = 'Unknown'
-              if (userID === WMEURMPT.me.getID()) {
-                userName = WMEURMPT.me.getUsername()
+              if (userID === wmeSDK.State.getUserInfo().id) {
+                userName = wmeSDK.State.getUserInfo().userName
                 if (c === ur.data.session.comments.length - 1) {
                   ur.lastVisitCommentsCount = ur.data.session.comments.length
                 }
@@ -1071,7 +1064,7 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.isURFiltered2 = function (ur) {
-    const userId = WMEURMPT.loginManager.user.getID()
+    const userId = wmeSDK.State.getUserInfo().id
     const userName = wmeSDK.State.getUserInfo().userName
     const Map_TeamUserId = 2218201706
     let found = false
@@ -1833,7 +1826,7 @@ function WMEURMPT_Injected () {
     ca.name = elName.value
     WMEURMPT.log('Add CA to scan list: ' + ca.name)
     ca.geometryWKT = WMEURMPT.lastUploadedWKT
-    ca.geometryGeoJSON = W.userscripts.convertWktToGeoJSON(WMEURMPT.lastUploadedWKT)
+    ca.geometryGeoJSON = WMEURMPT.wazeUS.convertWktToGeoJSON(WMEURMPT.lastUploadedWKT)
     WMEURMPT.removeCustomNameFromAreaList(ca.name)
     WMEURMPT.areaList.custom.push(ca)
     elName.value = ''
@@ -1980,12 +1973,12 @@ function WMEURMPT_Injected () {
           
         }
         else if (typeof area.geometryWKT !== 'undefined' && area.geometryWKT !== null) {
-          area.geometryGeoJSON = W.userscripts.convertWktToGeoJSON(area.geometryWKT)
+          area.geometryGeoJSON = WMEURMPT.wazeUS.convertWktToGeoJSON(area.geometryWKT)
           objArea = area.geometryGeoJSON
           center = turf.centroid(area.geometryGeoJSON)
         }
         else if (typeof area.geometryOL !== 'undefined' && area.geometryOL !== null) {
-          area.geometryGeoJSON = W.userscripts.toGeoJSONGeometry(area.geometryOL)
+          area.geometryGeoJSON = WMEURMPT.wazeUS.toGeoJSONGeometry(area.geometryOL)
           objArea = area.geometryGeoJSON
           center = turf.centroid(area.geometryGeoJSON)          
         }
@@ -2043,7 +2036,7 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.exportAllCAToJSON = function () {
-    this.setAttribute('download', 'URMPT_CustomAreas_' + WMEURMPT.me.getUsername() + '.json')
+    this.setAttribute('download', 'URMPT_CustomAreas_' + wmeSDK.State.getUserInfo().userName + '.json')
     this.href = 'data:application/octet-stream;charset=utf-8;base64,' + btoa(JSON.stringify(WMEURMPT.areaList.custom.map(function (e) {
       return { name: e.name, geometryWKT: e.geometryWKT , geometryGeoJSON: e.geometryGeoJSON }
     })))
@@ -2076,7 +2069,7 @@ function WMEURMPT_Injected () {
       elt.onclick = WMEURMPT.getFunctionWithArgs(WMEURMPT.updateListsFromManualScan, [{ type: 'managedArea' }])
       scanGroup.appendChild(elt)
     }
-    if (WMEURMPT.areaList.country.length === 0 && (WMEURMPT.ul >= 8 || WMEURMPT.me.isCountryManager())) {
+    if (!WMEURMPT.hideRank4Tip && WMEURMPT.areaList.country.length === 0 && (WMEURMPT.ul >= 8 || wmeSDK.State.getManagedCountries().length > 0)) {
       scanGroup.insertAdjacentHTML('beforeend', WMEURMPT.convertHtml('<br/><font color="#C00000">You are a rank 4+ editor. In the areas tab, you can select a country or a subset for state managers in the list and add it to your scan list!'))
     }
     for (let c = 0; c < WMEURMPT.areaList.country.length; c++) {
@@ -2209,10 +2202,10 @@ function WMEURMPT_Injected () {
           geometry = WMEURMPT.areaList[area.type][i].geometryGeoJSON.geometry
         }
         else if (typeof objArea.geometryWKT !== 'undefined' && objArea.geometryWKT !== null) {
-          geometry = W.userscripts.convertWktToGeoJSON(objArea.geometryWKT)
+          geometry = WMEURMPT.wazeUS.convertWktToGeoJSON(objArea.geometryWKT)
         }
         else if (typeof objArea.geometryOL !== 'undefined' && objArea.geometryOL !== null) {
-          geometry = W.userscripts.toGeoJSONGeometry(objArea.geometryOL)
+          geometry = WMEURMPT.wazeUS.toGeoJSONGeometry(objArea.geometryOL)
         }
         break
       }
@@ -2380,7 +2373,7 @@ function WMEURMPT_Injected () {
     WMEURMPT.statsCSV = ''
     const div = WMEURMPT.getId('urmpt-stats')
     WMEURMPT.removeChildElements(div)
-
+    try {
     let content = ''
     content = '<font style="font-size: larger; font-weight: bold;">Statistics</font><hr/>'
     content += '<div style="display: flex;"><span style="margin: 5px; display: table;" >From: </span><input value="' + fromDate + '" type="text" id="urmpt-stat-from" size="9"/><span style="margin: 5px; display: table;" > to </span><input value="' + toDate + '" type="text" id="urmpt-stat-to" size="9"/><button id="urmpt-stat-refresh" style="display: table; width: 40px; padding: 0px;">OK</button></div><hr/>'
@@ -2403,18 +2396,19 @@ function WMEURMPT_Injected () {
     content += WMEURMPT.computeStats(dateFilteredURList, dateFilteredMPList, fromDate, toDate)
     content += '<hr/>'
     content += 'You:<br/><br/>'
+    const myName = wmeSDK.State.getUserInfo().userName
     const closedURbyMe = dateFilteredURList.filter(function (value) {
-      return value.data.resolvedBy === WMEURMPT.me.getID()
+      return value.data.resolvedByName === myName
     }).length
     const closedMPbyMe = dateFilteredMPList.filter(function (value) {
-      return value.data.resolvedBy === WMEURMPT.me.getID()
+      return value.data.resolvedByName === myName
     }).length
     const niURbyMe = dateFilteredURList.filter(function (value) {
-      return value.data.resolvedBy === WMEURMPT.me.getID() && value.data.open === false && value.data.resolution === 1
+      return value.data.resolvedByName === myName && value.data.open === false && value.data.resolution === 1
     }).length
     const soURbyMe = closedURbyMe - niURbyMe
     const niMPbyMe = dateFilteredMPList.filter(function (value) {
-      return value.data.resolvedBy === WMEURMPT.me.getID() && value.data.open === false && value.data.resolution === 1
+      return value.data.resolvedByName === myName && value.data.open === false && value.data.resolution === 1
     }).length
     const soMPbyMe = closedMPbyMe - niMPbyMe
     content += 'URs closed: ' + closedURbyMe + ' (' + Math.round(closedURbyMe * 100 / dateFilteredURList.length) + '%)<br/>'
@@ -2475,11 +2469,13 @@ function WMEURMPT_Injected () {
     }
     content += '</ul>'
     div.innerHTML = WMEURMPT.convertHtml(content)
+    window.setTimeout(WMEURMPT.setupStatHandlers)
+    } finally {
     WMEURMPT.showPBInfo(false)
     pb.hide()
     pb.update(0)
     WMEURMPT.info()
-    window.setTimeout(WMEURMPT.setupStatHandlers)
+    }
   }
 
   WMEURMPT.setupStatHandlers = function () {
@@ -2497,7 +2493,7 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.exportStatsToCSV = function () {
-    this.setAttribute('download', 'URMPT_Stats_' + (new Date()).toISOString().substr(0, 10) + '_' + WMEURMPT.me.getUsername() + '.csv')
+    this.setAttribute('download', 'URMPT_Stats_' + (new Date()).toISOString().substr(0, 10) + '_' + wmeSDK.State.getUserInfo().userName + '.csv')
     this.href = 'data:application/octet-stream;charset=utf-8;base64,' + btoa(WMEURMPT.statsCSV)
   }
 
@@ -3080,7 +3076,7 @@ function WMEURMPT_Injected () {
       areasTabPane.style.paddingLeft = '0px'
       areasTabPane.style.paddingRight = '40px'
       urmpTabContent.appendChild(areasTabPane)
-      if (WMEURMPT.ul >= 8 || WMEURMPT.me.isCountryManager()) {
+      if (WMEURMPT.ul >= 8 || wmeSDK.State.getManagedCountries().length > 0) {
         const divCM = WMEURMPT.createElement('div')
         divCM.innerHTML = WMEURMPT.convertHtml('Add country(ies) or subset(s) to scan list.<br/>')
         const divInput = WMEURMPT.createElement('div')
@@ -3208,8 +3204,11 @@ function WMEURMPT_Injected () {
       disableScrollingSpan.innerHTML = WMEURMPT.convertHtml('<input type="checkbox" id="urmpt-setting-disablescrolling" ' + (WMEURMPT.disableScrolling ? 'checked ' : '') + '/> Disable text scrolling in tables<br>')
       settingsTabPane.appendChild(disableScrollingSpan)
       const keepBlacklist = WMEURMPT.createElement('span')
-      keepBlacklist.innerHTML = WMEURMPT.convertHtml('<input type="checkbox" id="urmpt-setting-keepblacklist" ' + (WMEURMPT.keepBlacklist ? 'checked ' : '') + '/> Keep blacklist state on clear')
+      keepBlacklist.innerHTML = WMEURMPT.convertHtml('<input type="checkbox" id="urmpt-setting-keepblacklist" ' + (WMEURMPT.keepBlacklist ? 'checked ' : '') + '/> Keep blacklist state on clear<br>')
       settingsTabPane.appendChild(keepBlacklist)
+      const hideRank4TipSpan = WMEURMPT.createElement('span')
+      hideRank4TipSpan.innerHTML = WMEURMPT.convertHtml('<input type="checkbox" id="urmpt-setting-hiderank4tip" ' + (WMEURMPT.hideRank4Tip ? 'checked ' : '') + '/> Hide rank 4+ editor scan tip')
+      settingsTabPane.appendChild(hideRank4TipSpan)
       window.setTimeout(WMEURMPT.setupCAEvents)
       window.setTimeout(WMEURMPT.updateScanGroup)
 
@@ -3495,6 +3494,11 @@ function WMEURMPT_Injected () {
 
         WMEURMPT.saveOptions()
       })
+      WMEURMPT.getId('urmpt-setting-hiderank4tip').addEventListener('change', function (e) {
+        WMEURMPT.hideRank4Tip = e.target.checked
+        WMEURMPT.saveOptions()
+        WMEURMPT.updateScanGroup()
+      })
       // End of Settings Tab //
 
       // Setup Stylesheet //
@@ -3543,6 +3547,7 @@ function WMEURMPT_Injected () {
       } else {
         WMEURMPT.disable()
       }
+      WMEURMPT.connectStatHandler()
 
     })
 
@@ -3576,14 +3581,16 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.getTLArea = function () {
-    const xy = WMEURMPT.wazeMap.getLonLatFromPixel({ x: 0, y: 0 })
+    const bbox = wmeSDK.Map.getMapExtent()
+    const xy = { lon: bbox[0], lat: bbox[3] }
     WMEURMPT.log('get TL', xy)
     WMEURMPT.getId('urmpt-areas-tl-lon').value = xy.lon
     WMEURMPT.getId('urmpt-areas-tl-lat').value = xy.lat
   }
 
   WMEURMPT.getBRArea = function () {
-    const xy = WMEURMPT.wazeMap.getLonLatFromPixel({ x: WMEURMPT.wazeMap.getSize().w, y: WMEURMPT.wazeMap.getSize().h })
+    const bbox = wmeSDK.Map.getMapExtent()
+    const xy = { lon: bbox[2], lat: bbox[1] }
     WMEURMPT.log('get BR', xy)
     WMEURMPT.getId('urmpt-areas-br-lon').value = xy.lon
     WMEURMPT.getId('urmpt-areas-br-lat').value = xy.lat
@@ -4728,7 +4735,7 @@ function WMEURMPT_Injected () {
         comments += WMEURMPT.URList[i].data.session.comments[c].userName + ' (' + (new Date(WMEURMPT.URList[i].data.session.comments[c].createdOn)).toLocaleString() + '):' + NL
         comments += WMEURMPT.URList[i].data.session.comments[c].text + NL + NL
         lastCommentDays = WMEURMPT.getDuration(WMEURMPT.URList[i].data.session.comments[c].createdOn)
-        if (c === WMEURMPT.URList[i].data.session.comments.length - 1 && WMEURMPT.URList[i].data.session.comments[c].userName === WMEURMPT.me.getUsername()) {
+        if (c === WMEURMPT.URList[i].data.session.comments.length - 1 && WMEURMPT.URList[i].data.session.comments[c].userName === wmeSDK.State.getUserInfo().userName) {
           WMEURMPT.URList[i].lastVisitCommentsCount = WMEURMPT.URList[i].data.session.comments.length
         }
       }
@@ -5075,7 +5082,7 @@ function WMEURMPT_Injected () {
           let text = c.userName + ' (' + (new Date(c.createdOn)).toLocaleString() + '):' + NL
           text += c.text
           conversationArray.push(text)
-          if (j === WMEURMPT.MCList[i].data.conversation.length - 1 && c.userName === WMEURMPT.me.getUsername()) {
+          if (j === WMEURMPT.MCList[i].data.conversation.length - 1 && c.userName === wmeSDK.State.getUserInfo().userName) {
             WMEURMPT.MCList[i].lastVisitCommentsCount = WMEURMPT.MCList[i].data.conversation.length
           }
         })
@@ -5787,7 +5794,7 @@ function WMEURMPT_Injected () {
       return
     }
     //const mp = wmeSDK.DataModel.MapProblems.getById({ mapProblemId: MPId.MPId })
-    const mp = W.model.mapProblems.getObjectById(MPId.MPId)
+    const mp = WMEURMPT.wazeModel.mapProblems.getObjectById(MPId.MPId)
     WMEURMPT.logDebug('mp :', mp)
     if (mp !== null) {
         WMEURMPT.wazePC.showProblem(mp, { showNext: false })
@@ -6182,7 +6189,7 @@ function WMEURMPT_Injected () {
     if (e.type === 'mapUpdateRequest') {
       id = e.attributes.id
     } else if (typeof this.tagName !== 'undefined' && this.tagName === 'image') {
-      const mod = W.userscripts.getDataModelByFeatureElement(this)
+      const mod = WMEURMPT.wazeUS.getDataModelByFeatureElement(this)
       id = mod.attributes.id
     }
     if (id > 0) {
@@ -6647,8 +6654,8 @@ function WMEURMPT_Injected () {
       for (let c = 0; c < ur.data.session.comments.length; c++) {
         const userID = ur.data.session.comments[c].userID
         let userName = 'Unknown'
-        if (userID === WMEURMPT.me.getID()) {
-          userName = WMEURMPT.me.getUsername()
+        if (userID === wmeSDK.State.getUserInfo().id) {
+          userName = wmeSDK.State.getUserInfo().userName
           if (c === ur.data.session.comments.length - 1) {
             ur.lastVisitCommentsCount = ur.data.session.comments.length
           }
@@ -6750,7 +6757,7 @@ function WMEURMPT_Injected () {
       if (Object.prototype.hasOwnProperty.call(mc.data, 'conversation')) {
         mc.data.conversation.forEach(function (c, i) {
           // what's the SDK version to fetch the user id now??? //
-          if (c.userID === WMEURMPT.me.getID()) {
+          if (c.userID === wmeSDK.State.getUserInfo().id) {
             if (i === mc.data.conversation.length - 1) {
               mc.lastVisitCommentsCount = mc.data.conversation.length
             }
@@ -7352,8 +7359,8 @@ function WMEURMPT_Injected () {
                       break
                     }
                   }
-                  if (userID === WMEURMPT.loginManager.user.getID()) {
-                    userName = WMEURMPT.loginManager.user.getUsername()
+                  if (userID === wmeSDK.State.getUserInfo().id) {
+                    userName = wmeSDK.State.getUserInfo().userName
                   }
                 }
                 this.data.session.comments[c].userName = userName
@@ -7605,8 +7612,8 @@ function WMEURMPT_Injected () {
               }
               if (Object.prototype.hasOwnProperty.call(this.data, 'conversation')) {
                 this.data.conversation.forEach(function (c, j) {
-                  if (c.userID === WMEURMPT.me.getID()) {
-                    c.userName = WMEURMPT.me.getUsername()
+                  if (c.userID === wmeSDK.State.getUserInfo().id) {
+                    c.userName = wmeSDK.State.getUserInfo().userName
                     if (j === this.data.conversation.length - 1) {
                       this.lastVisitCommentsCount = this.data.conversation.length
                     }
@@ -7913,7 +7920,7 @@ function WMEURMPT_Injected () {
         return turf.booleanPointInPolygon(point, this.geometryGeoJSON)
       }
       else if (typeof this.geometryWKT !== 'undefined' && this.geometryWKT !== 'null' && this.geometryWKT !== '') {
-        this.geometryGeoJSON = turf.multiPolygon(W.userscripts.convertWktToGeoJSON(this.geometryWKT).coordinates)
+        this.geometryGeoJSON = turf.multiPolygon(WMEURMPT.wazeUS.convertWktToGeoJSON(this.geometryWKT).coordinates)
         return turf.booleanPointInPolygon(point, this.geometryGeoJSON)
       }
       return false
@@ -7971,7 +7978,8 @@ function WMEURMPT_Injected () {
       MCAgeColIsLastComment: WMEURMPT.MCAgeColIsLastComment,
       disableScrolling: WMEURMPT.disableScrolling,
       purInvertFilter: WMEURMPT.purInvertFilter,
-      urtInvertFilter: WMEURMPT.urtInvertFilter
+      urtInvertFilter: WMEURMPT.urtInvertFilter,
+      hideRank4Tip: WMEURMPT.hideRank4Tip
     }
     WMEURMPT.log('save options: ', options)
     // eslint-disable-next-line no-undef
@@ -8039,9 +8047,9 @@ function WMEURMPT_Injected () {
       WMEURMPT.currentMPFilter = typeof options.filterMP === 'undefined' ? WMEURMPT.MPFilterList.hideClosed + WMEURMPT.MPFilterList.hideBlacklisted : options.filterMP
       WMEURMPT.currentMCFilter = typeof options.filterMC === 'undefined' ? WMEURMPT.MCFilterList.hideBlacklisted : options.filterMC
       WMEURMPT.currentPURFilter = typeof options.filterPUR === 'undefined' ? WMEURMPT.PURFilterList.hideBlacklisted : options.filterPUR
-      WMEURMPT.currentURKeyWord = typeof options.filterURKeyword === 'undefined' ? WMEURMPT.loginManager.user.getUsername() : options.filterURKeyword
-      WMEURMPT.currentMCKeyWord = typeof options.filterMCKeyword === 'undefined' ? WMEURMPT.loginManager.user.getUsername() : options.filterMCKeyword
-      WMEURMPT.currentPURKeyWord = typeof options.filterPURKeyword === 'undefined' ? WMEURMPT.loginManager.user.getUsername() : options.filterPURKeyword
+      WMEURMPT.currentURKeyWord = typeof options.filterURKeyword === 'undefined' ? wmeSDK.State.getUserInfo().userName : options.filterURKeyword
+      WMEURMPT.currentMCKeyWord = typeof options.filterMCKeyword === 'undefined' ? wmeSDK.State.getUserInfo().userName : options.filterMCKeyword
+      WMEURMPT.currentPURKeyWord = typeof options.filterPURKeyword === 'undefined' ? wmeSDK.State.getUserInfo().userName : options.filterPURKeyword
       WMEURMPT.currentURLimitTo = typeof options.filterURLimitTo === 'undefined' ? 100 : options.filterURLimitTo
       WMEURMPT.currentMPLimitTo = typeof options.filterMPLimitTo === 'undefined' ? 100 : options.filterMPLimitTo
       WMEURMPT.currentMCLimitTo = typeof options.filterMCLimitTo === 'undefined' ? 100 : options.filterMCLimitTo
@@ -8077,6 +8085,7 @@ function WMEURMPT_Injected () {
       WMEURMPT.purInvertFilter = typeof options.purInvertFilter === 'undefined' ? WMEURMPT.purInvertFilter : options.purInvertFilter
       WMEURMPT.urtInvertFilter = typeof options.urtInvertFilter === 'undefined' ? WMEURMPT.urtInvertFilter : options.urtInvertFilter
       WMEURMPT.keepBlacklist = typeof options.keepBlacklist === 'undefined' ? WMEURMPT.keepBlacklist : options.keepBlacklist
+      WMEURMPT.hideRank4Tip = typeof options.hideRank4Tip === 'undefined' ? false : options.hideRank4Tip
       WMEURMPT.URBlacklist = typeof options.URBlacklist === 'undefined' ? WMEURMPT.URBlacklist : options.URBlacklist
       WMEURMPT.MPBlacklist = typeof options.MPBlacklist === 'undefined' ? WMEURMPT.MPBlacklist : options.MPBlacklist
       WMEURMPT.MCBlacklist = typeof options.MCBlacklist === 'undefined' ? WMEURMPT.MCBlacklist : options.MCBlacklist
@@ -8180,7 +8189,7 @@ function WMEURMPT_Injected () {
 
   WMEURMPT.load = function () {
     try {
-      WMEURMPT.dictionary['"' + WMEURMPT.me.getUsername() + '"'] = '~Z'
+      WMEURMPT.dictionary['"' + wmeSDK.State.getUserInfo().userName + '"'] = '~Z'
 
       GMStorageHelper.load('WMEURMPTracking_options', WMEURMPT.optionsLoaded)
       GMStorageHelper.load('WMEURMPTracking_URList', WMEURMPT.urlistLoaded)
