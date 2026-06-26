@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        WME UR-MP tracking
-// @version     3.9.32
+// @version     3.9.33
 // @description Track UR and MP in the Waze Map Editor
 // @namespace   https://greasyfork.org/en/scripts/368141-wme-ur-mp-tracking
 // @include     /^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor\/?.*$/
@@ -992,7 +992,7 @@ function WMEURMPT_Injected () {
             for (let c = 0; c < ur.data.session.comments.length; c++) {
               const userID = ur.data.session.comments[c].userID
               let userName = 'Unknown'
-              if (userID === wmeSDK.State.getUserInfo().id) {
+              if (userID === WMEURMPT.me.attributes.id) {
                 userName = wmeSDK.State.getUserInfo().userName
                 if (c === ur.data.session.comments.length - 1) {
                   ur.lastVisitCommentsCount = ur.data.session.comments.length
@@ -1064,7 +1064,7 @@ function WMEURMPT_Injected () {
   }
 
   WMEURMPT.isURFiltered2 = function (ur) {
-    const userId = wmeSDK.State.getUserInfo().id
+    const userId = WMEURMPT.me.attributes.id
     const userName = wmeSDK.State.getUserInfo().userName
     const Map_TeamUserId = 2218201706
     let found = false
@@ -6654,7 +6654,7 @@ function WMEURMPT_Injected () {
       for (let c = 0; c < ur.data.session.comments.length; c++) {
         const userID = ur.data.session.comments[c].userID
         let userName = 'Unknown'
-        if (userID === wmeSDK.State.getUserInfo().id) {
+        if (userID === WMEURMPT.me.attributes.id) {
           userName = wmeSDK.State.getUserInfo().userName
           if (c === ur.data.session.comments.length - 1) {
             ur.lastVisitCommentsCount = ur.data.session.comments.length
@@ -6756,8 +6756,7 @@ function WMEURMPT_Injected () {
       }
       if (Object.prototype.hasOwnProperty.call(mc.data, 'conversation')) {
         mc.data.conversation.forEach(function (c, i) {
-          // what's the SDK version to fetch the user id now??? //
-          if (c.userID === wmeSDK.State.getUserInfo().id) {
+          if (c.userID === WMEURMPT.me.attributes.id) {
             if (i === mc.data.conversation.length - 1) {
               mc.lastVisitCommentsCount = mc.data.conversation.length
             }
@@ -7359,7 +7358,7 @@ function WMEURMPT_Injected () {
                       break
                     }
                   }
-                  if (userID === wmeSDK.State.getUserInfo().id) {
+                  if (userID === WMEURMPT.me.attributes.id) {
                     userName = wmeSDK.State.getUserInfo().userName
                   }
                 }
@@ -7612,7 +7611,7 @@ function WMEURMPT_Injected () {
               }
               if (Object.prototype.hasOwnProperty.call(this.data, 'conversation')) {
                 this.data.conversation.forEach(function (c, j) {
-                  if (c.userID === wmeSDK.State.getUserInfo().id) {
+                  if (c.userID === WMEURMPT.me.attributes.id) {
                     c.userName = wmeSDK.State.getUserInfo().userName
                     if (j === this.data.conversation.length - 1) {
                       this.lastVisitCommentsCount = this.data.conversation.length
